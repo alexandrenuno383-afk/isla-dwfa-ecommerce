@@ -17,8 +17,9 @@ docker compose up -d                 # PostgreSQL 16 → docker compose ps mostr
 uv sync                              # .venv com Django + dependências de dev
 uv run python manage.py migrate
 uv run pytest                        # 4 testes verdes · 4 green tests → podem começar
+uv run python manage.py seed         # catálogo e cliente de demonstração, idempotente
 uv run python manage.py createsuperuser
-uv run python manage.py runserver    # http://localhost:8000/api/health/ · /admin/
+uv run python manage.py runserver    # health, /api/v1/ e /admin/
 ```
 
 Requisitos · requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Docker Compose v2, Git. **Porta 5432 ocupada?** · port busy? → `ports: ["5433:5432"]` no `compose.yaml` **e** `:5433` no `DATABASE_URL` do `.env`.
@@ -33,6 +34,7 @@ config/settings/
   prod.py      cabeçalhos de segurança, sem DEBUG · security headers, no DEBUG
 accounts/      User(AbstractUser) — AUTH_USER_MODEL = "accounts.User" · UserFactory
 core/          GET /api/health/ → 200 {"status":"ok","db":"ok"} · 503 com a BD em baixo · 503 when the DB is down
+shop/          Category, Product, Customer, Order, OrderItem, Payment · models, API, factories, seed
 docs/decisions.md   as vossas decisões, uma linha cada · your decisions, one line each
 compose.yaml   PostgreSQL 16 com healthcheck
 pytest.ini     DJANGO_SETTINGS_MODULE=config.settings.test · --reuse-db
@@ -40,6 +42,14 @@ pytest.ini     DJANGO_SETTINGS_MODULE=config.settings.test · --reuse-db
 ```
 
 `DJANGO_SETTINGS_MODULE` vem do `.env` (`config.settings.dev`); os testes usam `config.settings.test` (ver `pytest.ini`); `wsgi.py`/`asgi.py` assumem `config.settings.prod`.
+
+## API da loja · shop API
+
+- Recursos CRUD em `/api/v1/categories/`, `products/`, `customers/`, `orders/` e `payments/`.
+- A lista de produtos aceita `category`, `is_active`, `search` e `ordering`; listas usam paginação por página (20 resultados).
+- Encomendas aceitam itens na criação, verificam stock e guardam o preço unitário da compra. `POST /api/v1/orders/{id}/cancel/` cancela uma encomenda pendente e repõe o stock.
+- Schema OpenAPI: `/api/schema/`; interface Swagger: `/api/docs/`.
+- Seed de demonstração repetível: `uv run python manage.py seed`.
 
 ## Comandos do dia a dia · Everyday commands
 

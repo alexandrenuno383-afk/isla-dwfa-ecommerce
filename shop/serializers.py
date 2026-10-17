@@ -1,0 +1,89 @@
+from decimal import Decimal
+
+from django.db import transaction
+from rest_framework import serializers
+
+from .models import Category, Customer, Order, OrderItem, Payment, Product
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "name", "slug", "description"]
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "category",
+            "category_name",
+            "name",
+            "sku",
+            "description",
+            "price",
+            "stock",
+            "is_active",
+        ]
+
+
+class CustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = ["id", "email", "first_name", "last_name", "created_at"]
+        read_only_fields = ["created_at"]
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    quantity = serializers.IntegerField(min_value=1)
+
+    class Meta:
+        model = OrderItem
+        fields = ["id", "product", "product_name", "quantity", "unit_price"]
+        read_only_fields = ["unit_price"]
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+
+    class Meta:
+        model = Payment
+        fields = ["id", "order", "method", "status", "amount", "created_at"]
+        read_only_fields = ["status", "created_at"]
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True)
+    customer_email = serializers.EmailField(source="customer.email", read_only=True)
+
+    class Meta:
+        model = Order
+        fields = ["id", "customer", "customer_email", "status", "items", "created_at", "updated_at"]
+        read_only_fields = ["status", "created_at", "updated_at"]
+
+    def validate_items(self, items):
+        if not items:
+            raise serializers.ValidationError("An order must contain at least one item.")
+        products = [item["product"].pk for item in items]
+        if len(products) != len(set(products)):
+            raise serializers.ValidationError("A product can only appear once per order.")
+        for item in items:
+            if item["quantity"] > item["product"].stock:
+                raise serializers.ValidationError(f"Insufficient stock for {item['product'].name}.")
+        return items
+
+    @transaction.atomic
+    def create(self, validated_data):
+        items_data = validated_data.pop("items")
+        order = Order.objects.create(**validated_data)
+        for item in items_data:
+            product = item["product"]
+            product.stock -= item["quantity"]
+            product.save(update_fields=["stock"])
+            OrderItem.objects.create(order=order, unit_price=product.price, **item)
+        return order
