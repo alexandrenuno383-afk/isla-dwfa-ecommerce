@@ -43,6 +43,8 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    "EXCEPTION_HANDLER": "shop.api.problem_details_exception_handler",
+    "DEFAULT_THROTTLE_RATES": {"order-pay": "30/minute"},
 }
 
 SPECTACULAR_SETTINGS = {

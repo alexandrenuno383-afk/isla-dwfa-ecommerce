@@ -1,13 +1,16 @@
 from decimal import Decimal
 
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
+from rest_framework.throttling import ScopedRateThrottle
 
 from shop.factories import (
     CategoryFactory,
     CustomerFactory,
     OrderFactory,
     OrderItemFactory,
+    PaymentFactory,
     ProductFactory,
 )
 from shop.models import Order, Payment
@@ -50,7 +53,38 @@ def test_order_create_validates_stock_and_persists_order():
         format="json",
     )
     assert invalid.status_code == 400
-    assert "quantity" in str(invalid.data["items"])
+    assert invalid["Content-Type"].startswith("application/problem+json")
+    assert invalid.data["status"] == 400
+    assert "quantity" in str(invalid.data["errors"]["items"])
+
+
+@pytest.mark.django_db
+def test_invalid_nested_item_does_not_leave_order_or_change_stock():
+    customer = CustomerFactory()
+    valid_product = ProductFactory(stock=5)
+    short_product = ProductFactory(stock=1)
+    before = Order.objects.count()
+
+    response = APIClient().post(
+        "/api/v1/orders/",
+        {
+            "customer": customer.pk,
+            "items": [
+                {"product": valid_product.pk, "quantity": 1},
+                {"product": short_product.pk, "quantity": 2},
+            ],
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.data["status"] == 400
+    assert set(response.data) == {"type", "title", "status", "errors"}
+    assert Order.objects.count() == before
+    valid_product.refresh_from_db()
+    short_product.refresh_from_db()
+    assert valid_product.stock == 5
+    assert short_product.stock == 1
 
 
 @pytest.mark.django_db
@@ -65,6 +99,26 @@ def test_order_list_with_nested_items_has_no_n_plus_one(django_assert_max_num_qu
         assert body["count"] == 20
         assert len(body["results"]) == 20
         assert len(body["results"][0]["items"]) == 3
+
+
+@pytest.mark.django_db
+def test_order_list_query_baseline_without_prefetch(monkeypatch, django_assert_num_queries):
+    orders = OrderFactory.create_batch(20)
+    for order in orders:
+        OrderItemFactory.create_batch(3, order=order)
+
+    from shop.views import OrderViewSet
+
+    original_get_queryset = OrderViewSet.get_queryset
+
+    def without_prefetch(view):
+        return original_get_queryset(view).prefetch_related(None)
+
+    monkeypatch.setattr(OrderViewSet, "get_queryset", without_prefetch)
+    with django_assert_num_queries(82):
+        response = APIClient().get("/api/v1/orders/")
+        assert response.status_code == 200
+        assert len(response.data["results"]) == 20
 
 
 @pytest.mark.django_db
@@ -131,3 +185,31 @@ def test_openapi_schema_is_available():
     response = APIClient().get("/api/schema/")
     assert response.status_code == 200
     assert "openapi" in response.data
+
+
+@pytest.mark.django_db
+def test_payment_cursor_pagination_uses_one_query(django_assert_max_num_queries):
+    PaymentFactory.create_batch(25)
+
+    with django_assert_max_num_queries(1):
+        response = APIClient().get("/api/v1/payments/")
+        body = response.json()
+        assert len(body["results"]) == 20
+        assert body["next"] is not None
+
+
+@pytest.mark.django_db
+def test_pay_action_uses_its_scoped_throttle(monkeypatch):
+    cache.clear()
+    monkeypatch.setattr(ScopedRateThrottle, "THROTTLE_RATES", {"order-pay": "1/minute"})
+    first_order = OrderFactory()
+    OrderItemFactory(order=first_order)
+    second_order = OrderFactory()
+    OrderItemFactory(order=second_order)
+    client = APIClient()
+
+    first = client.post(f"/api/v1/orders/{first_order.pk}/pay/")
+    second = client.post(f"/api/v1/orders/{second_order.pk}/pay/")
+
+    assert first.status_code == 200
+    assert second.status_code == 429

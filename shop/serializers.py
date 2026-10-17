@@ -103,10 +103,16 @@ class OrderSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop("items")
+        product_ids = {item["product"].pk for item in items_data}
+        products = Product.objects.select_for_update().filter(pk__in=product_ids).in_bulk()
         order = Order.objects.create(**validated_data)
         total = Decimal("0.00")
         for item in items_data:
-            product = item["product"]
+            product = products[item["product"].pk]
+            if item["quantity"] > product.stock:
+                raise serializers.ValidationError(
+                    {"items": f"Insufficient stock for {product.name}."}
+                )
             product.stock -= item["quantity"]
             product.save(update_fields=["stock"])
             OrderItem.objects.create(order=order, unit_price=product.price, **item)

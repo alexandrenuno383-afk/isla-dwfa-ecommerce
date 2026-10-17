@@ -1,12 +1,14 @@
 from django.db.models import DecimalField, F, Prefetch, Sum, Value
 from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import decorators, filters, response, viewsets
+from rest_framework.throttling import ScopedRateThrottle
 
+from .api import ProblemDetailsSerializer
 from .filters import ProductFilter
 from .models import Category, Customer, Order, OrderItem, Payment, Product
+from .pagination import PaymentCursorPagination
 from .serializers import (
     CategorySerializer,
     CustomerSerializer,
@@ -54,6 +56,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "status", "total"]
     ordering = ["-created_at"]
     http_method_names = ["get", "post", "head", "options"]
+    throttle_scope = "order-pay"
 
     def get_queryset(self):
         items = OrderItem.objects.select_related("product")
@@ -75,12 +78,12 @@ class OrderViewSet(viewsets.ModelViewSet):
         responses={
             200: OrderSerializer,
             409: OpenApiResponse(
-                response=OpenApiTypes.OBJECT,
+                response=ProblemDetailsSerializer,
                 description="The order is not pending or has no items.",
             ),
         },
     )
-    @decorators.action(detail=True, methods=["post"])
+    @decorators.action(detail=True, methods=["post"], throttle_classes=[ScopedRateThrottle])
     def pay(self, request, pk=None):
         order = pay_order(self.get_object())
         return response.Response(self.get_serializer(order).data)
@@ -90,7 +93,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         responses={
             200: OrderSerializer,
             409: OpenApiResponse(
-                response=OpenApiTypes.OBJECT,
+                response=ProblemDetailsSerializer,
                 description="Only pending orders can be cancelled.",
             ),
         },
@@ -105,5 +108,5 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Payment.objects.select_related("order", "order__customer")
     serializer_class = PaymentSerializer
     filterset_fields = ["status", "method"]
-    ordering_fields = ["created_at", "amount"]
-    ordering = ["-created_at"]
+    filter_backends = [DjangoFilterBackend]
+    pagination_class = PaymentCursorPagination

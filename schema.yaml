@@ -508,8 +508,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: {}
+                $ref: '#/components/schemas/ProblemDetails'
           description: Only pending orders can be cancelled.
   /api/v1/orders/{id}/pay/:
     post:
@@ -538,13 +537,18 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: {}
+                $ref: '#/components/schemas/ProblemDetails'
           description: The order is not pending or has no items.
   /api/v1/payments/:
     get:
       operationId: v1_payments_list
       parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
       - in: query
         name: method
         schema:
@@ -557,24 +561,6 @@ paths:
           * `card` - Card
           * `mbway` - MB WAY
           * `bank_transfer` - Bank transfer
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: search
-        required: false
-        in: query
-        description: A search term.
-        schema:
-          type: string
       - in: query
         name: status
         schema:
@@ -1017,22 +1003,18 @@ components:
     PaginatedPaymentList:
       type: object
       required:
-      - count
       - results
       properties:
-        count:
-          type: integer
-          example: 123
         next:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?page=4
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?page=2
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:
@@ -1150,6 +1132,21 @@ components:
         * `pending` - Pending
         * `succeeded` - Succeeded
         * `failed` - Failed
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        errors: {}
+      required:
+      - errors
+      - status
+      - title
+      - type
     Product:
       type: object
       properties:
