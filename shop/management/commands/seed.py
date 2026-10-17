@@ -22,6 +22,17 @@ class Command(BaseCommand):
                     stock=25,
                 )
             )
+        for index in range(1, 26):
+            name = "Desk Lamp" if index == 1 else f"Demo Accessory {index:02d}"
+            products.append(
+                ProductFactory(
+                    sku=f"DEMO-PAGE-{index:03d}",
+                    category=category,
+                    name=name,
+                    price=f"{10 + index}.00",
+                    stock=25,
+                )
+            )
         customer = CustomerFactory(
             email="demo@example.com",
             first_name="Demo",
@@ -29,6 +40,6 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"Seed ready: {category.name}, {len(products)} products, {customer.email}."
+                f"Seed ready: {category.name}, {len(products)} demo products, {customer.email}."
             )
         )
