@@ -26,3 +26,29 @@ EN: one line per decision — what, why, rejected alternative. Grows ficha by fi
 - **Erros DRF usam Problem Details (`application/problem+json`, `about:blank`)** — `errors` mantém os detalhes de validação por campo sem alterar os status HTTP. · Keep field errors in a consistent envelope.
 - **Só a ação `pay` recebe `ScopedRateThrottle` (30/min)** — limita operações de estado e mantém as listas de leitura livres nesta ficha. · Scope limits state-changing payment attempts.
 - **A paginação cursor de pagamentos ordena por `-id`** — a chave única dá uma ordem estável ao cursor. · A unique key gives deterministic cursor ordering.
+
+## Ficha 03 — autenticação · authentication
+
+- **JWT expira em 30 minutos e refresh em 1 dia; a SPA guarda ambos em memória** — evita persistir credenciais acessíveis a XSS em `localStorage`, aceitando novo login depois de recarregar a página; cookies `HttpOnly` exigiriam um endpoint de refresh adaptado. · Keep both tokens in memory to avoid XSS-readable storage, accepting re-login after reload.
+
+### Matriz de autorização · authorization matrix
+
+Todos os caminhos abaixo têm o prefixo `/api/v1`.
+
+| Endpoint/operação | Anónimo | Cliente | Gestor |
+| --- | --- | --- | --- |
+| `GET /categories/` | 200 | 200 | 200 |
+| `GET /products/` | 401 | 200 | 200 |
+| `POST/PATCH/DELETE /products/` | 401 | 403 | 201/200/204 |
+| `GET /customers/` e detalhe | 401 | 200 só perfil próprio; perfil alheio 404 | 200 todos |
+| `POST /customers/` | 401 | 201 perfil próprio, se ainda não existir | 201 perfil do próprio gestor |
+| `GET /orders/` e detalhe | 401 | 200 próprias; alheia 404 | 200 todas |
+| `POST /orders/` | 401 | 201 própria (exige perfil Customer associado) | 201 própria (exige perfil associado) |
+| `POST /orders/{id}/pay/` e `/cancel/` | 401 | 200/409 própria; alheia 404 | 200/409 todas |
+| `GET /payments/` | 401 | 200 só pagamentos próprios | 200 todos |
+
+- **O queryset de encomendas aplica o filtro por `customer__user` antes da permissão por objeto** — ao retirar esse filtro, o teste de lista passa a expor encomendas alheias e os testes parametrizados de detalhe e `pay` deixam de devolver 404 (a segunda camada responde 403); as duas camadas são necessárias para não confirmar a existência do recurso. · Queryset filtering hides foreign orders with 404; object permissions remain the second guard.
+
+### Ficha 03 — opção extra: audit log
+
+- **Registamos `session_login`, `login_failed` e `jwt_login` como eventos de inserção, guardando só o identificador não secreto e `REMOTE_ADDR`** — passwords e tokens nunca entram no log; `user=SET_NULL` preserva o evento quando a conta é apagada. · Authentication audit events are insert-only and exclude credentials; `SET_NULL` preserves history.

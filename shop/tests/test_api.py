@@ -1,10 +1,12 @@
 from decimal import Decimal
 
 import pytest
+from django.contrib.auth.models import Group
 from django.core.cache import cache
 from rest_framework.test import APIClient
 from rest_framework.throttling import ScopedRateThrottle
 
+from accounts.factories import UserFactory
 from shop.factories import (
     CategoryFactory,
     CustomerFactory,
@@ -16,11 +18,25 @@ from shop.factories import (
 from shop.models import Order, Payment
 
 
+def authenticated_client():
+    client = APIClient()
+    client.force_authenticate(user=UserFactory())
+    return client
+
+
+def gestor_client():
+    user = UserFactory()
+    user.groups.add(Group.objects.get(name="gestores"))
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client
+
+
 @pytest.mark.django_db
 def test_order_list_is_paginated():
     OrderFactory.create_batch(25)
 
-    response = APIClient().get("/api/v1/orders/")
+    response = gestor_client().get("/api/v1/orders/")
 
     assert response.status_code == 200
     body = response.json()
@@ -31,9 +47,11 @@ def test_order_list_is_paginated():
 
 @pytest.mark.django_db
 def test_order_create_validates_stock_and_persists_order():
+    user = UserFactory()
     product = ProductFactory(stock=5, price="12.50")
-    customer = CustomerFactory()
+    customer = CustomerFactory(user=user)
     client = APIClient()
+    client.force_authenticate(user=user)
 
     response = client.post(
         "/api/v1/orders/",
@@ -60,12 +78,15 @@ def test_order_create_validates_stock_and_persists_order():
 
 @pytest.mark.django_db
 def test_invalid_nested_item_does_not_leave_order_or_change_stock():
-    customer = CustomerFactory()
+    user = UserFactory()
+    customer = CustomerFactory(user=user)
     valid_product = ProductFactory(stock=5)
     short_product = ProductFactory(stock=1)
     before = Order.objects.count()
 
-    response = APIClient().post(
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
         "/api/v1/orders/",
         {
             "customer": customer.pk,
@@ -93,8 +114,9 @@ def test_order_list_with_nested_items_has_no_n_plus_one(django_assert_max_num_qu
     for order in orders:
         OrderItemFactory.create_batch(3, order=order)
 
+    client = gestor_client()
     with django_assert_max_num_queries(3):
-        response = APIClient().get("/api/v1/orders/")
+        response = client.get("/api/v1/orders/")
         body = response.json()
         assert body["count"] == 20
         assert len(body["results"]) == 20
@@ -115,8 +137,9 @@ def test_order_list_query_baseline_without_prefetch(monkeypatch, django_assert_n
         return original_get_queryset(view).prefetch_related(None)
 
     monkeypatch.setattr(OrderViewSet, "get_queryset", without_prefetch)
+    client = gestor_client()
     with django_assert_num_queries(82):
-        response = APIClient().get("/api/v1/orders/")
+        response = client.get("/api/v1/orders/")
         assert response.status_code == 200
         assert len(response.data["results"]) == 20
 
@@ -128,7 +151,7 @@ def test_product_price_range_search_and_ordering_filters():
     ProductFactory(category=category, name="Table Lamp", sku="LAMP-2", price="15.00")
     ProductFactory(category=category, name="Desk", sku="DESK-1", price="30.00")
 
-    response = APIClient().get(
+    response = authenticated_client().get(
         "/api/v1/products/?min_price=10&max_price=25&search=lamp&ordering=-price&page=1"
     )
 
@@ -142,7 +165,7 @@ def test_product_page_two_has_seeded_results():
     for index in range(25):
         ProductFactory(category=category, sku=f"PAGED-{index:03d}")
 
-    response = APIClient().get("/api/v1/products/?page=2")
+    response = authenticated_client().get("/api/v1/products/?page=2")
 
     assert response.status_code == 200
     assert response.data["count"] == 25
@@ -151,9 +174,11 @@ def test_product_page_two_has_seeded_results():
 
 @pytest.mark.django_db
 def test_pay_action_updates_state_and_repeated_payment_conflicts():
-    order = OrderFactory()
+    user = UserFactory()
+    order = OrderFactory(customer=CustomerFactory(user=user))
     OrderItemFactory(order=order, quantity=2, unit_price="12.50")
     client = APIClient()
+    client.force_authenticate(user=user)
 
     response = client.post(f"/api/v1/orders/{order.pk}/pay/")
 
@@ -169,10 +194,13 @@ def test_pay_action_updates_state_and_repeated_payment_conflicts():
 @pytest.mark.django_db
 def test_cancel_action_restores_stock():
     product = ProductFactory(stock=3)
-    order = OrderFactory()
+    user = UserFactory()
+    order = OrderFactory(customer=CustomerFactory(user=user))
     OrderItemFactory(order=order, product=product, quantity=2)
 
-    response = APIClient().post(f"/api/v1/orders/{order.pk}/cancel/")
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(f"/api/v1/orders/{order.pk}/cancel/")
 
     assert response.status_code == 200
     assert response.data["status"] == Order.Status.CANCELLED
@@ -182,7 +210,7 @@ def test_cancel_action_restores_stock():
 
 @pytest.mark.django_db
 def test_openapi_schema_is_available():
-    response = APIClient().get("/api/schema/")
+    response = gestor_client().get("/api/schema/")
     assert response.status_code == 200
     assert "openapi" in response.data
 
@@ -191,8 +219,9 @@ def test_openapi_schema_is_available():
 def test_payment_cursor_pagination_uses_one_query(django_assert_max_num_queries):
     PaymentFactory.create_batch(25)
 
+    client = gestor_client()
     with django_assert_max_num_queries(1):
-        response = APIClient().get("/api/v1/payments/")
+        response = client.get("/api/v1/payments/")
         body = response.json()
         assert len(body["results"]) == 20
         assert body["next"] is not None
@@ -206,7 +235,7 @@ def test_pay_action_uses_its_scoped_throttle(monkeypatch):
     OrderItemFactory(order=first_order)
     second_order = OrderFactory()
     OrderItemFactory(order=second_order)
-    client = APIClient()
+    client = gestor_client()
 
     first = client.post(f"/api/v1/orders/{first_order.pk}/pay/")
     second = client.post(f"/api/v1/orders/{second_order.pk}/pay/")

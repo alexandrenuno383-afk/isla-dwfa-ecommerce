@@ -90,7 +90,14 @@ class OrderSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "status", "total", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "customer",
+            "status",
+            "total",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate_items(self, items):
         if not items:
@@ -104,7 +111,9 @@ class OrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items_data = validated_data.pop("items")
         product_ids = {item["product"].pk for item in items_data}
-        products = Product.objects.select_for_update().filter(pk__in=product_ids).in_bulk()
+        products = (
+            Product.objects.select_for_update().filter(pk__in=product_ids).order_by("pk").in_bulk()
+        )
         order = Order.objects.create(**validated_data)
         total = Decimal("0.00")
         for item in items_data:
@@ -115,7 +124,12 @@ class OrderSerializer(serializers.ModelSerializer):
                 )
             product.stock -= item["quantity"]
             product.save(update_fields=["stock"])
-            OrderItem.objects.create(order=order, unit_price=product.price, **item)
+            OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=item["quantity"],
+                unit_price=product.price,
+            )
             total += product.price * item["quantity"]
         order.total = total
         return order

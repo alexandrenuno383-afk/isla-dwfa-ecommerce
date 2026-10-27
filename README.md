@@ -2,12 +2,12 @@
 
 **Desenvolvimento Web Full-stack Avançado** · Mestrado em Engenharia Informática · ISLA Gaia · 2026/27 · David Vaz ([@davidmgvaz](https://github.com/davidmgvaz))
 
-**PT** — Ponto de partida do projeto da UC (tema votado: **e-commerce**). Traz o que é igual para toda a gente — modelo de utilizador próprio, `/api/health/`, settings por ambiente, PostgreSQL 16 em Docker, pytest-django, factory_boy, ruff e CI — e **nada** do domínio: esse acrescentam vocês na Ficha 02 (app `shop`), e o M1/M2/M3 constroem-se sobre este repositório.
-**EN** — Starting point for the course project (voted theme: **e-commerce**). It carries what is the same for everyone — custom user model, `/api/health/`, per-environment settings, PostgreSQL 16 in Docker, pytest-django, factory_boy, ruff and CI — and **none** of the domain: you add it in Ficha 02 (app `shop`), and M1/M2/M3 are built on this repository.
+**PT** — Projeto da UC com o domínio de e-commerce da Ficha 02 e autenticação, autorização e hardening da API da Ficha 03. Inclui PostgreSQL 16 em Docker, Django REST Framework, JWT, documentação OpenAPI, testes com pytest-django, factory_boy, ruff e CI.
+**EN** — Course project with the Ficha 02 e-commerce domain and the Ficha 03 API authentication, authorization and hardening. It includes PostgreSQL 16 in Docker, Django REST Framework, JWT, OpenAPI documentation, pytest-django tests, factory_boy, ruff and CI.
 
 ## Começar · Getting started
 
-**Um repositório por par** · one repository per pair: um dos dois faz *fork* deste repositório (privado, com o par e `davidmgvaz` como colaboradores) · one of you forks this repo (private, with your pair and `davidmgvaz` as collaborators).
+**Ficha 02 e Ficha 03 são trabalho individual** · both are individual assignments: cada aluno mantém o seu próprio fork privado, partilhado com `davidmgvaz`; os pares são para o Projeto M1–M3 · each student keeps a private fork shared with `davidmgvaz`; pairs are for the M1–M3 project.
 
 ```sh
 git clone git@github.com:<vosso-utilizador>/isla-dwfa-ecommerce.git
@@ -16,9 +16,9 @@ cp .env.example .env                 # nunca commitar o .env · never commit .en
 docker compose up -d                 # PostgreSQL 16 → docker compose ps mostra "healthy"
 uv sync                              # .venv com Django + dependências de dev
 uv run python manage.py migrate
-uv run pytest                        # 4 testes verdes · 4 green tests → podem começar
+uv run pytest --create-db            # cria uma BD de testes nova e corre a suite
 uv run python manage.py seed         # catálogo e cliente de demonstração, idempotente
-uv run python manage.py createsuperuser
+uv run python manage.py createsuperuser  # opcional, para usar o Django Admin
 uv run python manage.py runserver    # health, /api/v1/ e /admin/
 ```
 
@@ -32,7 +32,7 @@ config/settings/
   dev.py       DEBUG, email na consola · console email
   test.py      hasher rápido, email em memória · fast hasher, in-memory email
   prod.py      cabeçalhos de segurança, sem DEBUG · security headers, no DEBUG
-accounts/      User(AbstractUser) — AUTH_USER_MODEL = "accounts.User" · UserFactory
+accounts/      User, AuditEvent, login JWT e GET /api/v1/me/ · JWT login and current user
 core/          GET /api/health/ → 200 {"status":"ok","db":"ok"} · 503 com a BD em baixo · 503 when the DB is down
 shop/          Category, Product, Customer, Order, OrderItem, Payment · models, API, factories, seed
 docs/decisions.md   as vossas decisões, uma linha cada · your decisions, one line each
@@ -43,13 +43,63 @@ pytest.ini     DJANGO_SETTINGS_MODULE=config.settings.test · --reuse-db
 
 `DJANGO_SETTINGS_MODULE` vem do `.env` (`config.settings.dev`); os testes usam `config.settings.test` (ver `pytest.ini`); `wsgi.py`/`asgi.py` assumem `config.settings.prod`.
 
-## API da loja · shop API
+## API e autenticação · API and authentication
 
 - Recursos CRUD em `/api/v1/categories/`, `products/`, `customers/`, `orders/` e `payments/`.
 - A lista de produtos aceita `category`, `is_active`, `search` e `ordering`; listas usam paginação por página (20 resultados).
 - Encomendas aceitam itens na criação, verificam stock e guardam o preço unitário da compra. `POST /api/v1/orders/{id}/cancel/` cancela uma encomenda pendente e repõe o stock.
 - Schema OpenAPI: `/api/schema/`; interface Swagger: `/api/docs/`.
 - Seed de demonstração repetível: `uv run python manage.py seed`.
+- O catálogo de categorias é público; os restantes recursos requerem autenticação. Clientes só veem as próprias encomendas e pagamentos; o grupo `gestores` pode gerir produtos e consultar todos os registos.
+- Login e refresh JWT: `POST /api/v1/auth/token/` e `POST /api/v1/auth/token/refresh/`. Usar o token de acesso em `Authorization: Bearer <access>`; `GET /api/v1/me/` devolve o utilizador autenticado e os seus grupos.
+- Tokens de acesso duram 30 minutos e refresh 1 dia. O refresh roda e invalida o token anterior. O login tem limite de 10 tentativas por minuto.
+- CORS permite por omissão `http://localhost:5173` apenas nos caminhos `/api/`; configure origens adicionais em `CORS_ALLOWED_ORIGINS` no `.env`.
+- A opção extra implementada é o audit log: regista logins de sessão e JWT e falhas de autenticação, sem guardar passwords ou tokens.
+
+### Exemplo de login · login example
+
+```sh
+curl -sS -X POST http://localhost:8000/api/v1/auth/token/ \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"O_TEU_UTILIZADOR","password":"A_TUA_PASSWORD"}'
+
+curl -sS http://localhost:8000/api/v1/me/ \
+  -H 'Authorization: Bearer O_TEU_ACCESS_TOKEN'
+```
+
+Não coloques passwords, tokens ou o ficheiro `.env` no repositório.
+
+## Ficha 03 — segurança · security
+
+- A autenticação padrão é JWT, seguida de sessão para manter o Django Admin e a Browsable API funcionais; a permissão padrão é `IsAuthenticated`.
+- `CategoryViewSet` permite leitura pública. Produtos podem ser lidos por utilizadores autenticados e só o grupo `gestores` pode criar, alterar ou apagar produtos.
+- Encomendas e pagamentos são filtrados por proprietário no queryset e protegidos por permissões por objeto. Um cliente que tenta consultar ou pagar a encomenda de outra pessoa recebe 404.
+- `customer`, `status` e `total` são somente de leitura na criação/alteração de encomendas. O cliente associado é definido pelo servidor com base no utilizador autenticado.
+- Passwords novas usam Argon2, com PBKDF2 para verificar hashes existentes. A password mínima tem 12 caracteres.
+- O modelo `AuditEvent` é preenchido por inserções nos sinais de autenticação e no serializer JWT. As falhas guardam apenas o identificador fornecido, nunca a password.
+
+Para recriar a base de dados de testes quando as migrações mudarem (o pytest está configurado com `--reuse-db`):
+
+```sh
+uv run pytest --create-db
+```
+
+Verificações de qualidade e produção:
+
+```sh
+uv run ruff check .
+uv run ruff format --check .
+uv run python manage.py makemigrations --check --dry-run
+uv run pytest
+
+DJANGO_SETTINGS_MODULE=config.settings.prod \
+SECRET_KEY='temporary-review-key-0123456789abcdefghijklmnopqrstuvwxyz-0123456789' \
+ALLOWED_HOSTS=shop.example \
+DATABASE_URL=postgres://x@x/x \
+uv run python manage.py check --deploy
+```
+
+O `SECRET_KEY` acima é apenas um valor temporário para a verificação; em produção, define um segredo forte através do ambiente. Não guardes segredos no Git.
 
 ## Comandos do dia a dia · Everyday commands
 
@@ -73,4 +123,4 @@ docker compose down -v                           # apagar a base de dados local 
 
 ## Entregas · Deliverables
 
-Ficha 02 · tag `ficha-02-models` (sáb 17/10) e `ficha-02-api` (seg 19/10) · URL do repositório no Moodle até **sex 23/10/2026, 23h59** · M1 09/11 · M2 29/11 · M3 03/01.
+Ficha 02 · tags `ficha-02-models` e `ficha-02-api` · Ficha 03 · tag `ficha-03` · submeter o URL do repositório no Moodle conforme o prazo indicado na ficha · M1 09/11 · M2 29/11 · M3 03/01.

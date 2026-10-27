@@ -1,6 +1,8 @@
 import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 from accounts.factories import UserFactory
 
@@ -14,3 +16,8 @@ def test_custom_user_model_is_configured():
 def test_user_factory_builds_a_user_that_can_log_in(client):
     user = UserFactory()
     assert client.login(username=user.username, password="pass1234")
+
+
+def test_password_minimum_length_is_12_characters():
+    with pytest.raises(ValidationError):
+        validate_password("short")
