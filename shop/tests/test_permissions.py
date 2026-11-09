@@ -47,10 +47,11 @@ def test_products_are_readable_to_clients_and_writable_only_by_gestores():
 
 
 @pytest.mark.django_db
-def test_anonymous_users_cannot_read_protected_resources():
+def test_anonymous_users_can_read_catalogue_but_not_private_resources():
     client = APIClient()
 
-    assert client.get("/api/v1/products/").status_code == 401
+    assert client.get("/api/v1/categories/").status_code == 200
+    assert client.get("/api/v1/products/").status_code == 200
     assert client.get("/api/v1/customers/").status_code == 401
     assert client.get("/api/v1/orders/").status_code == 401
     assert client.get("/api/v1/payments/").status_code == 401

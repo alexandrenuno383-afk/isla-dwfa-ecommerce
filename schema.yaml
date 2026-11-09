@@ -162,20 +162,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenObtainPair'
+              $ref: '#/components/schemas/AuditedTokenObtainPair'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/TokenObtainPair'
+              $ref: '#/components/schemas/AuditedTokenObtainPair'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/TokenObtainPair'
+              $ref: '#/components/schemas/AuditedTokenObtainPair'
         required: true
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenObtainPair'
+                $ref: '#/components/schemas/TokenPair'
           description: ''
   /api/v1/auth/token/refresh/:
     post:
@@ -189,20 +189,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenRefresh'
+              $ref: '#/components/schemas/RefreshTokenRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/TokenRefresh'
+              $ref: '#/components/schemas/RefreshTokenRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/TokenRefresh'
+              $ref: '#/components/schemas/RefreshTokenRequest'
         required: true
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenRefresh'
+                $ref: '#/components/schemas/TokenPair'
           description: ''
   /api/v1/categories/:
     get:
@@ -501,13 +501,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Order'
+              $ref: '#/components/schemas/OrderCreateRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/Order'
+              $ref: '#/components/schemas/OrderCreateRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Order'
+              $ref: '#/components/schemas/OrderCreateRequest'
         required: true
       security:
       - jwtAuth: []
@@ -929,6 +929,18 @@ paths:
           description: No response body
 components:
   schemas:
+    AuditedTokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - password
+      - username
     Category:
       type: object
       properties:
@@ -1042,6 +1054,15 @@ components:
       - status
       - total
       - updated_at
+    OrderCreateRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemCreate'
+      required:
+      - items
     OrderItem:
       type: object
       properties:
@@ -1067,6 +1088,17 @@ components:
       - product_name
       - quantity
       - unit_price
+    OrderItemCreate:
+      type: object
+      properties:
+        product:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 1
+      required:
+      - product
+      - quantity
     OrderStatusEnum:
       enum:
       - pending
@@ -1269,9 +1301,8 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
         stock:
           type: integer
-          maximum: 9223372036854775807
+          maximum: 2147483647
           minimum: 0
-          format: int64
         is_active:
           type: boolean
     Payment:
@@ -1355,9 +1386,8 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
         stock:
           type: integer
-          maximum: 9223372036854775807
+          maximum: 2147483647
           minimum: 0
-          format: int64
         is_active:
           type: boolean
       required:
@@ -1367,32 +1397,18 @@ components:
       - name
       - price
       - sku
-    TokenObtainPair:
+    RefreshTokenRequest:
       type: object
       properties:
-        username:
-          type: string
-          writeOnly: true
-        password:
-          type: string
-          writeOnly: true
-        access:
-          type: string
-          readOnly: true
         refresh:
           type: string
-          readOnly: true
       required:
-      - access
-      - password
       - refresh
-      - username
-    TokenRefresh:
+    TokenPair:
       type: object
       properties:
         access:
           type: string
-          readOnly: true
         refresh:
           type: string
       required:

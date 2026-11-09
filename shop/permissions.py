@@ -22,7 +22,8 @@ class IsGestor(BasePermission):
 class IsGestorOrReadOnly(BasePermission):
     def has_permission(self, request, view):
         if request.method in SAFE_METHODS:
-            return request.user.is_authenticated
+            # Keep catalogue browsing public; only writes require the gestor role.
+            return True
         return is_gestor(request.user)
 
 

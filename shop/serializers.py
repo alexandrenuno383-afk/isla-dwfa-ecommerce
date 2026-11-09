@@ -64,6 +64,15 @@ class OrderItemSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class OrderItemCreateSerializer(serializers.Serializer):
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class OrderCreateRequestSerializer(serializers.Serializer):
+    items = OrderItemCreateSerializer(many=True)
+
+
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment

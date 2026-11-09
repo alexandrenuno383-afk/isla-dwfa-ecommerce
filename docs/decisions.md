@@ -38,7 +38,7 @@ Todos os caminhos abaixo têm o prefixo `/api/v1`.
 | Endpoint/operação | Anónimo | Cliente | Gestor |
 | --- | --- | --- | --- |
 | `GET /categories/` | 200 | 200 | 200 |
-| `GET /products/` | 401 | 200 | 200 |
+| `GET /products/` | 200 | 200 | 200 |
 | `POST/PATCH/DELETE /products/` | 401 | 403 | 201/200/204 |
 | `GET /customers/` e detalhe | 401 | 200 só perfil próprio; perfil alheio 404 | 200 todos |
 | `POST /customers/` | 401 | 201 perfil próprio, se ainda não existir | 201 perfil do próprio gestor |
@@ -49,6 +49,21 @@ Todos os caminhos abaixo têm o prefixo `/api/v1`.
 
 - **O queryset de encomendas aplica o filtro por `customer__user` antes da permissão por objeto** — ao retirar esse filtro, o teste de lista passa a expor encomendas alheias e os testes parametrizados de detalhe e `pay` deixam de devolver 404 (a segunda camada responde 403); as duas camadas são necessárias para não confirmar a existência do recurso. · Queryset filtering hides foreign orders with 404; object permissions remain the second guard.
 
+- **A leitura de categorias e produtos é pública, mas a escrita de produtos exige o grupo `gestores`** — a SPA pode mostrar o catálogo antes do login, sem abrir encomendas ou dados de clientes. · Let visitors browse the catalogue while restricting product writes and private resources.
+
 ### Ficha 03 — opção extra: audit log
 
 - **Registamos `session_login`, `login_failed` e `jwt_login` como eventos de inserção, guardando só o identificador não secreto e `REMOTE_ADDR`** — passwords e tokens nunca entram no log; `user=SET_NULL` preserva o evento quando a conta é apagada. · Authentication audit events are insert-only and exclude credentials; `SET_NULL` preserves history.
+
+## Ficha 04 — frontend · frontend
+
+- **O frontend Vue fica em `frontend/` no mesmo repositório da API Django** — um repositório reúne aplicação, contrato OpenAPI e verificações do M2. · Keep the SPA and API together in the project repository.
+- **Usamos CORS configurado no Django em vez de um proxy Vite** — o browser chama a origem explícita `http://localhost:8000`, exercitando a configuração CORS da Ficha 03. · Exercise the API's real CORS policy during local development.
+- **Pesquisa e página vivem em `route.query`** — partilhar ou recarregar o URL preserva a vista; estado local isolado não teria esse comportamento. · URLs restore and share the current catalogue view.
+- **O detalhe do produto é carregado por rota lazy** — o JavaScript dessa vista só é descarregado quando um produto é aberto. · Keep the initial catalogue bundle smaller.
+- **O tipo `Product` espelha a API atual, sem `attributes`** — o domínio decidiu não incluir `JSONField`; a SPA mostra os campos realmente servidos pelo serializer. · Keep the frontend contract aligned with the relational API.
+- **Geramos os tipos com `openapi-typescript` a partir de `schema.yaml` e usamos `openapi-fetch`** — os caminhos e filtros válidos acompanham o contrato publicado, em vez de duplicar tipos à mão. · Generate the frontend contract from the API schema.
+- **A SPA mantém access e refresh apenas em memória e, ao receber 401, roda o refresh e repete o pedido uma vez** — segue a decisão da Ficha 03 e exige novo login após reload. · Follow the prior memory-only decision and retry once after token rotation.
+- **Erros de login e encomenda são mostrados junto ao respetivo formulário/ação** — erros de validação e conflitos 409 não substituem a página inteira. · Keep API validation feedback beside the relevant action.
+- **A pesquisa usa `useDebounce` com 300 ms antes de atualizar `route.query`** — evita um pedido por tecla e continua a preservar a pesquisa no URL para partilhar ou recarregar. · Debounce searches while keeping the URL as the source of navigable state.
+- **A SPA mantém preços recebidos como strings e calcula a estimativa em cêntimos inteiros** — evita aritmética monetária com ponto flutuante; o backend calcula e confirma o total definitivo. · Keep money exact in minor units in the UI and authoritative in the API.

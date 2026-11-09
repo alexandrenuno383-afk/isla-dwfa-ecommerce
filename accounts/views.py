@@ -4,10 +4,10 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .models import AuditEvent
-from .serializers import MeSerializer
+from .serializers import MeSerializer, RefreshTokenRequestSerializer, TokenPairSerializer
 
 
 class AuditedTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -27,6 +27,16 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth"
     serializer_class = AuditedTokenObtainPairSerializer
+
+    @extend_schema(responses=TokenPairSerializer)
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class DocumentedTokenRefreshView(TokenRefreshView):
+    @extend_schema(request=RefreshTokenRequestSerializer, responses=TokenPairSerializer)
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 
 class MeView(APIView):

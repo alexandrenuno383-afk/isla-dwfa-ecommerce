@@ -50,7 +50,7 @@ pytest.ini     DJANGO_SETTINGS_MODULE=config.settings.test · --reuse-db
 - Encomendas aceitam itens na criação, verificam stock e guardam o preço unitário da compra. `POST /api/v1/orders/{id}/cancel/` cancela uma encomenda pendente e repõe o stock.
 - Schema OpenAPI: `/api/schema/`; interface Swagger: `/api/docs/`.
 - Seed de demonstração repetível: `uv run python manage.py seed`.
-- O catálogo de categorias é público; os restantes recursos requerem autenticação. Clientes só veem as próprias encomendas e pagamentos; o grupo `gestores` pode gerir produtos e consultar todos os registos.
+- As leituras de categorias e produtos são públicas; as escritas de produtos exigem o grupo `gestores`. Os restantes recursos requerem autenticação. Clientes só veem as próprias encomendas e pagamentos; gestores podem consultar todos os registos.
 - Login e refresh JWT: `POST /api/v1/auth/token/` e `POST /api/v1/auth/token/refresh/`. Usar o token de acesso em `Authorization: Bearer <access>`; `GET /api/v1/me/` devolve o utilizador autenticado e os seus grupos.
 - Tokens de acesso duram 30 minutos e refresh 1 dia. O refresh roda e invalida o token anterior. O login tem limite de 10 tentativas por minuto.
 - CORS permite por omissão `http://localhost:5173` apenas nos caminhos `/api/`; configure origens adicionais em `CORS_ALLOWED_ORIGINS` no `.env`.

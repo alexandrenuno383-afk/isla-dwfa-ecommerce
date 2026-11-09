@@ -20,6 +20,7 @@ from .permissions import (
 from .serializers import (
     CategorySerializer,
     CustomerSerializer,
+    OrderCreateRequestSerializer,
     OrderSerializer,
     PaymentSerializer,
     ProductSerializer,
@@ -78,6 +79,10 @@ class OrderViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
     throttle_scope = "order-pay"
     permission_classes = [IsOwnerOrGestor]
+
+    @extend_schema(request=OrderCreateRequestSerializer)
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
 
     def get_queryset(self):
         items = OrderItem.objects.select_related("product")
