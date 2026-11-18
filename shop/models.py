@@ -117,6 +117,7 @@ class Payment(models.Model):
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
+    receipt_sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [

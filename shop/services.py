@@ -6,6 +6,7 @@ from django.db.models.functions import Coalesce
 from rest_framework.exceptions import APIException
 
 from .models import Order, OrderItem, Payment
+from .tasks import send_order_receipt
 
 
 class OperationConflict(APIException):
@@ -42,6 +43,8 @@ def pay_order(order, method=Payment.Method.MBWAY):
     order.status = Order.Status.PAID
     order.save(update_fields=["status", "updated_at"])
     order.total = total
+    order_id = order.pk
+    transaction.on_commit(lambda: send_order_receipt.delay(order_id))
     return order
 
 

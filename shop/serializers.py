@@ -73,6 +73,19 @@ class OrderCreateRequestSerializer(serializers.Serializer):
     items = OrderItemCreateSerializer(many=True)
 
 
+class OrdersReportAcceptedSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    status_url = serializers.CharField()
+
+
+class TaskStatusSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    state = serializers.CharField()
+    progress = serializers.JSONField(allow_null=True)
+    result = serializers.JSONField(allow_null=True)
+    error = serializers.CharField(allow_null=True)
+
+
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment

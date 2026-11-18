@@ -274,6 +274,38 @@ export interface paths {
     patch: operations['v1_products_partial_update']
     trace?: never
   }
+  '/api/v1/reports/orders/': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['v1_reports_orders_create']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/v1/tasks/{task_id}/': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['v1_tasks_retrieve']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -346,6 +378,10 @@ export interface components {
      * @enum {string}
      */
     OrderStatusEnum: 'pending' | 'paid' | 'shipped' | 'cancelled'
+    OrdersReportAccepted: {
+      id: string
+      status_url: string
+    }
     PaginatedCategoryList: {
       /** @example 123 */
       count: number
@@ -451,6 +487,7 @@ export interface components {
       description?: string
       /** Format: decimal */
       price?: string
+      /** Format: int64 */
       stock?: number
       is_active?: boolean
     }
@@ -486,11 +523,19 @@ export interface components {
       description?: string
       /** Format: decimal */
       price: string
+      /** Format: int64 */
       stock?: number
       is_active?: boolean
     }
     RefreshTokenRequest: {
       refresh: string
+    }
+    TaskStatus: {
+      id: string
+      state: string
+      progress: unknown
+      result: unknown
+      error: string | null
     }
     TokenPair: {
       access: string
@@ -1330,6 +1375,46 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Product']
+        }
+      }
+    }
+  }
+  v1_reports_orders_create: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['OrdersReportAccepted']
+        }
+      }
+    }
+  }
+  v1_tasks_retrieve: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TaskStatus']
         }
       }
     }

@@ -1,5 +1,9 @@
+import hashlib
+
+from django.core.cache import cache
 from django.db.models import DecimalField, F, Prefetch, Sum, Value
 from django.db.models.functions import Coalesce
+from django.utils.cache import patch_vary_headers
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import decorators, filters, response, viewsets
@@ -26,6 +30,7 @@ from .serializers import (
     ProductSerializer,
 )
 from .services import cancel_order, pay_order
+from .signals import CATEGORY_CACHE_VERSION_KEY
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -36,6 +41,34 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["name"]
     # O catálogo é público para permitir navegação antes do login.
     permission_classes = [drf_permissions.AllowAny]
+
+    def list(self, request, *args, **kwargs):
+        cache.add(CATEGORY_CACHE_VERSION_KEY, 0, timeout=None)
+        version = cache.get(CATEGORY_CACHE_VERSION_KEY, 0)
+        representation = f"{request.get_full_path()}|{request.accepted_renderer.media_type}"
+        digest = hashlib.sha256(representation.encode()).hexdigest()
+        cache_key = f"catalog:categories:v{version}:{digest}"
+        data = cache.get(cache_key)
+
+        if data is not None:
+            cached_response = response.Response(data)
+            cached_response["X-Cache"] = "HIT"
+            patch_vary_headers(cached_response, ("Accept",))
+            return cached_response
+
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            result = self.get_paginated_response(serializer.data)
+        else:
+            serializer = self.get_serializer(queryset, many=True)
+            result = response.Response(serializer.data)
+
+        cache.set(cache_key, result.data, timeout=300)
+        result["X-Cache"] = "MISS"
+        patch_vary_headers(result, ("Accept",))
+        return result
 
 
 class ProductViewSet(viewsets.ModelViewSet):

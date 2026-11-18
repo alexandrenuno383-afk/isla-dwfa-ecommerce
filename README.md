@@ -50,6 +50,8 @@ pytest.ini     DJANGO_SETTINGS_MODULE=config.settings.test · --reuse-db
 - Encomendas aceitam itens na criação, verificam stock e guardam o preço unitário da compra. `POST /api/v1/orders/{id}/cancel/` cancela uma encomenda pendente e repõe o stock.
 - Schema OpenAPI: `/api/schema/`; interface Swagger: `/api/docs/`.
 - Seed de demonstração repetível: `uv run python manage.py seed`.
+- Recibos de encomendas pagas são enviados por uma tarefa Celery após o commit do pagamento. Arranque o Redis com `docker compose up -d redis` e o worker com `uv run celery -A config worker -l info`; em desenvolvimento, o email aparece no terminal do worker. O envio fica registado em `Payment.receipt_sent_at` e entregas repetidas não enviam outro recibo.
+- Relatórios de encomendas são pedidos em `POST /api/v1/reports/orders/` e devolvem `202` com URL de progresso em `/api/v1/tasks/{id}/`; só o dono ou um gestor consegue consultar o estado. A propriedade expira após uma hora na cache Redis (DB 1).
 - As leituras de categorias e produtos são públicas; as escritas de produtos exigem o grupo `gestores`. Os restantes recursos requerem autenticação. Clientes só veem as próprias encomendas e pagamentos; gestores podem consultar todos os registos.
 - Login e refresh JWT: `POST /api/v1/auth/token/` e `POST /api/v1/auth/token/refresh/`. Usar o token de acesso em `Authorization: Bearer <access>`; `GET /api/v1/me/` devolve o utilizador autenticado e os seus grupos.
 - Tokens de acesso duram 30 minutos e refresh 1 dia. O refresh roda e invalida o token anterior. O login tem limite de 10 tentativas por minuto.

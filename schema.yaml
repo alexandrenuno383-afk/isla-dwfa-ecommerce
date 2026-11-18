@@ -927,6 +927,42 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/reports/orders/:
+    post:
+      operationId: v1_reports_orders_create
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrdersReportAccepted'
+          description: ''
+  /api/v1/tasks/{task_id}/:
+    get:
+      operationId: v1_tasks_retrieve
+      parameters:
+      - in: path
+        name: task_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+          description: ''
 components:
   schemas:
     AuditedTokenObtainPair:
@@ -1111,6 +1147,16 @@ components:
         * `paid` - Paid
         * `shipped` - Shipped
         * `cancelled` - Cancelled
+    OrdersReportAccepted:
+      type: object
+      properties:
+        id:
+          type: string
+        status_url:
+          type: string
+      required:
+      - id
+      - status_url
     PaginatedCategoryList:
       type: object
       required:
@@ -1301,8 +1347,9 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
         stock:
           type: integer
-          maximum: 2147483647
+          maximum: 9223372036854775807
           minimum: 0
+          format: int64
         is_active:
           type: boolean
     Payment:
@@ -1386,8 +1433,9 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
         stock:
           type: integer
-          maximum: 2147483647
+          maximum: 9223372036854775807
           minimum: 0
+          format: int64
         is_active:
           type: boolean
       required:
@@ -1404,6 +1452,26 @@ components:
           type: string
       required:
       - refresh
+    TaskStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+        progress:
+          nullable: true
+        result:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+      required:
+      - error
+      - id
+      - progress
+      - result
+      - state
     TokenPair:
       type: object
       properties:

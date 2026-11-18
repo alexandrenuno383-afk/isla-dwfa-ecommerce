@@ -7,6 +7,7 @@ here; whatever differs comes from the environment (`.env`, never in git).
 
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import environ
 
@@ -34,7 +35,7 @@ INSTALLED_APPS = [
     # apps do projeto · project apps
     "accounts",
     "core",
-    "shop",
+    "shop.apps.ShopConfig",
 ]
 
 REST_FRAMEWORK = {
@@ -132,3 +133,19 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_TASK_ACKS_LATE = True
+
+redis_parts = urlsplit(REDIS_URL)
+REDIS_CACHE_URL = urlunsplit(
+    (redis_parts.scheme, redis_parts.netloc, "/1", redis_parts.query, redis_parts.fragment)
+)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_CACHE_URL,
+    }
+}

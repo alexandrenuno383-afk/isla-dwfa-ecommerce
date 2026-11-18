@@ -26,6 +26,7 @@ EN: one line per decision — what, why, rejected alternative. Grows ficha by fi
 - **Erros DRF usam Problem Details (`application/problem+json`, `about:blank`)** — `errors` mantém os detalhes de validação por campo sem alterar os status HTTP. · Keep field errors in a consistent envelope.
 - **Só a ação `pay` recebe `ScopedRateThrottle` (30/min)** — limita operações de estado e mantém as listas de leitura livres nesta ficha. · Scope limits state-changing payment attempts.
 - **A paginação cursor de pagamentos ordena por `-id`** — a chave única dá uma ordem estável ao cursor. · A unique key gives deterministic cursor ordering.
+- **A lista de categorias usa cache de 5 minutos com chave versionada, invalidada por `post_save` e `post_delete`** — `/orders/` não usa este cache porque a resposta contém dados privados por utilizador e muda com pagamentos; um cache partilhado poderia expor encomendas alheias ou mostrar estados antigos. · Version catalogue data safely; avoid shared caching of private, frequently changing orders.
 
 ## Ficha 03 — autenticação · authentication
 
@@ -67,3 +68,10 @@ Todos os caminhos abaixo têm o prefixo `/api/v1`.
 - **Erros de login e encomenda são mostrados junto ao respetivo formulário/ação** — erros de validação e conflitos 409 não substituem a página inteira. · Keep API validation feedback beside the relevant action.
 - **A pesquisa usa `useDebounce` com 300 ms antes de atualizar `route.query`** — evita um pedido por tecla e continua a preservar a pesquisa no URL para partilhar ou recarregar. · Debounce searches while keeping the URL as the source of navigable state.
 - **A SPA mantém preços recebidos como strings e calcula a estimativa em cêntimos inteiros** — evita aritmética monetária com ponto flutuante; o backend calcula e confirma o total definitivo. · Keep money exact in minor units in the UI and authoritative in the API.
+
+## Ficha 05 — tarefas e cache · tasks and cache
+
+- **O envio do recibo é idempotente: a tarefa recebe o ID da encomenda, bloqueia o pagamento com `select_for_update` e consulta `receipt_sent_at` antes de enviar** — entregas repetidas do broker não enviam outro email depois do registo do primeiro envio. · Lock and a persisted sent marker make repeated deliveries safe.
+- **O recibo é agendado com `transaction.on_commit`** — o worker só pode ler o pagamento depois de este estar confirmado e uma transação revertida não deixa uma tarefa órfã na fila. · Queue work only after the payment transaction commits.
+- **O dono do relatório fica em `task:<id>:owner` na cache Redis por uma hora; tarefas desconhecidas ou alheias respondem 404** — o estado fica associado ao utilizador sem revelar se um ID de tarefa de outra pessoa existe. · Keep task ownership in Redis and conceal foreign task IDs with 404.
+- **Para correr a API, aplicamos migrações e iniciamos `uv run python manage.py runserver`; noutro terminal iniciamos `uv run celery -A config worker -l info`** — Redis e PostgreSQL arrancam com `docker compose up -d db redis`. · Start the backing services, API and worker in separate terminals.
